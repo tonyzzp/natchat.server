@@ -8,6 +8,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type Msg struct {
@@ -33,13 +34,13 @@ var serverAddr, _ = net.ResolveUDPAddr("udp", "192.168.199.144:13688")
 
 var socket *net.UDPConn
 var clients = make(map[string]string)
+var myName = ""
 
 func Start() {
 	socket, _ = net.ListenUDP("udp", nil)
 	go listen()
 	help()
 	var scanner = bufio.NewScanner(os.Stdin)
-	var myName = ""
 	for scanner.Scan() {
 		var cmds = strings.Split(scanner.Text(), " ")
 		var msg = Msg{}
@@ -66,7 +67,7 @@ func Start() {
 		case "chat":
 			msg.Event = "chat"
 			msg.Name = myName
-			msg.Msg = cmds[2]
+			msg.Msg = strings.Join(cmds[2:], " ")
 			sendToClient(cmds[1], msg)
 		case "peers":
 			for k, v := range clients {
@@ -92,7 +93,22 @@ func listen() {
 		case "touch":
 			if msg.Port > 0 {
 				clients[msg.Name] = msg.IP + ":" + strconv.Itoa(msg.Port)
+				go touch(msg.Name)
 			}
+		}
+	}
+}
+
+func touch(name string) {
+	var ticker = time.NewTicker(time.Second * 1)
+	var times = 0
+	for {
+		<-ticker.C
+		times++
+		sendToClient(name, Msg{Event: "touch", Name: myName})
+		if times == 2 {
+			ticker.Stop()
+			break
 		}
 	}
 }
@@ -101,7 +117,7 @@ func sendToClient(name string, msg interface{}) {
 	var bytes, _ = json.Marshal(msg)
 	var addr, _ = net.ResolveUDPAddr("udp", clients[name])
 	socket.WriteToUDP(bytes, addr)
-	fmt.Println("sendToClient", addr.String(), msg)
+	fmt.Println("sendToClient", addr.String(), string(bytes))
 }
 
 func sendTo(name string, msg string) {
