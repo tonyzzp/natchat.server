@@ -3,7 +3,9 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"flag"
 	"net"
+	"strconv"
 )
 
 type Msg struct {
@@ -22,9 +24,13 @@ type Client struct {
 
 var socket *net.UDPConn
 var clients = make(map[string]*Client)
+var regLogger = NewLogger("./log_reg.log")
+var touchLogger = NewLogger("./log_touch.log")
 
 func main() {
-	var laddr, _ = net.ResolveUDPAddr("udp", ":13688")
+	var port = flag.Int("port", 13688, "监听端口")
+	flag.Parse()
+	var laddr, _ = net.ResolveUDPAddr("udp", ":"+strconv.Itoa(*port))
 	var err error
 	socket, err = net.ListenUDP("udp", laddr)
 	if err != nil {
@@ -60,10 +66,12 @@ func processMsg(addr *net.UDPAddr, msg *Msg) {
 			IP:    addr.IP.String(),
 			Port:  addr.Port,
 		})
+		regLogger.Writef("name:%s, ip:%s, port:%d", msg.Name, addr.IP.String(), addr.Port)
 	case "unreg":
 		delete(clients, msg.Name)
 		send(addr, &Msg{
 			Event: "unreg",
+			Name:  msg.Name,
 		})
 	case "touch":
 		var client = clients[msg.Name]
@@ -71,15 +79,17 @@ func processMsg(addr *net.UDPAddr, msg *Msg) {
 			send(addr, &Msg{
 				Event: "err",
 				Msg:   "unreg",
+				Name:  msg.Name,
 			})
 		} else {
 			var remote = clients[msg.ToName]
 			if remote == nil {
 				send(addr, &Msg{
-					Event:  "act",
+					Event:  "touch",
 					ToName: msg.ToName,
 					Msg:    "offline",
 				})
+				touchLogger.Writef("%s(%s:%d) -> %s", client.Name, client.Addr.IP.String(), client.Addr.Port, msg.ToName)
 			} else {
 				send(addr, &Msg{
 					Event:  "touch",
@@ -93,6 +103,7 @@ func processMsg(addr *net.UDPAddr, msg *Msg) {
 					IP:     client.Addr.IP.String(),
 					Port:   client.Addr.Port,
 				})
+				touchLogger.Writef("%s(%s:%d) -> %s(%s:%d)", client.Name, client.Addr.IP.String(), client.Addr.Port, remote.Name, remote.Addr.IP.String(), remote.Addr.Port)
 			}
 		}
 	case "users":
