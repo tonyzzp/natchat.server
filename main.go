@@ -6,6 +6,8 @@ import (
 	"flag"
 	"net"
 	"strconv"
+
+	"github.com/tonyzzp/natchat.server/client"
 )
 
 type Msg struct {
@@ -29,8 +31,17 @@ var touchLogger = NewLogger("./log_touch.log")
 
 func main() {
 	var port = flag.Int("port", 13688, "监听端口")
+	var mod = flag.String("mode", "server", "server/client")
 	flag.Parse()
-	var laddr, _ = net.ResolveUDPAddr("udp", ":"+strconv.Itoa(*port))
+	if *mod == "server" {
+		startServer(*port)
+	} else {
+		client.Start()
+	}
+}
+
+func startServer(port int) {
+	var laddr, _ = net.ResolveUDPAddr("udp", "0.0.0.0:"+strconv.Itoa(port))
 	var err error
 	socket, err = net.ListenUDP("udp", laddr)
 	if err != nil {
@@ -85,23 +96,23 @@ func processMsg(addr *net.UDPAddr, msg *Msg) {
 			var remote = clients[msg.ToName]
 			if remote == nil {
 				send(addr, &Msg{
-					Event:  "touch",
-					ToName: msg.ToName,
-					Msg:    "offline",
+					Event: "touch",
+					Name:  msg.ToName,
+					Msg:   "offline",
 				})
 				touchLogger.Writef("%s(%s:%d) -> %s", client.Name, client.Addr.IP.String(), client.Addr.Port, msg.ToName)
 			} else {
 				send(addr, &Msg{
-					Event:  "touch",
-					ToName: msg.ToName,
-					IP:     remote.Addr.IP.String(),
-					Port:   remote.Addr.Port,
+					Event: "touch",
+					Name:  msg.ToName,
+					IP:    remote.Addr.IP.String(),
+					Port:  remote.Addr.Port,
 				})
 				send(remote.Addr, &Msg{
-					Event:  "touch",
-					ToName: client.Name,
-					IP:     client.Addr.IP.String(),
-					Port:   client.Addr.Port,
+					Event: "touch",
+					Name:  client.Name,
+					IP:    client.Addr.IP.String(),
+					Port:  client.Addr.Port,
 				})
 				touchLogger.Writef("%s(%s:%d) -> %s(%s:%d)", client.Name, client.Addr.IP.String(), client.Addr.Port, remote.Name, remote.Addr.IP.String(), remote.Addr.Port)
 			}
